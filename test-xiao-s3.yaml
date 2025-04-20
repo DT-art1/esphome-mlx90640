@@ -1,0 +1,62 @@
+esphome:
+  name: mlx90640-camera
+  platformio_options:
+    build_flags: -DBOARD_HAS_PSRAM
+    board_build.arduino.memory_type: qio_opi
+    board_build.f_flash: 80000000L
+    board_build.flash_mode: qio
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+i2c:
+  # frequency: 400kHz
+  frequency: 800kHz
+  sda: GPIO5
+  scl: GPIO6
+  scan: True
+  id: i2c_component
+
+mlx90640:
+    name: Temperature Camera
+    # default_resolution: "RESOLUTION_17_BIT"
+    # default_refresh_rate: "IR_REFRESH_RATE_8_HZ"
+    # default_presence_detector_threshold: 5.0
+    # default_presence_detector_hysteresis: 1.2
+    ambient:
+        name: Ambient
+    minimum:
+        name: Minimum Temperature
+    maximum:
+        name: Maximum Temperature
+    refresh_rate:
+        name: Refresh Rate
+    resolution:
+        name: Resolution
+    presence_detector:
+        name: Presence Detector
+    presence_detector_threshold:
+        name: Presence Threshold
+    presence_detector_hysteresis:
+        name: Presence Hysteresis
+#  on_image:
+#    then:
+#    - lambda: |-
+#        ESP_LOGD("main", "AUTOMATION: on_image len=%d, data=%c", image.length, image.data[0]);
+
+
+#esp32_camera_web_server:
+#  - port: 8080
+#    mode: stream
+#  - port: 8081
+#    mode: snapshot
