@@ -12,5 +12,5 @@ external_components:
   - source:
       type: git
       url: https://github.com/DT-art1/esphome-mlx90640
-      ref: main
+      ref: dependent-on-pr-7639
     components: [mlx90640]
