@@ -1,8 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
-from esphome.components import i2c, sensor,  select, binary_sensor, number
-from esphome.cpp_helpers import setup_entity
+from esphome.components import camera, i2c, sensor,  select, binary_sensor, number
 from esphome.const import (
     CONF_ID,
     DEVICE_CLASS_TEMPERATURE,
@@ -11,6 +10,7 @@ from esphome.const import (
     UNIT_CELSIUS,
     ENTITY_CATEGORY_CONFIG
 )
+
 
 DEPENDENCIES = ["i2c"]
 AUTO_LOAD = ["camera", "sensor", "select", "binary_sensor", "number"]
@@ -62,7 +62,7 @@ CONF_PRESENCE_DETECTOR_HYSTERESIS = "presence_detector_hysteresis"
 CONF_DEFAULT_PRESENCE_DETECTOR_THRESHOLD = "default_presence_detector_threshold"
 CONF_DEFAULT_PRESENCE_DETECTOR_HYSTERESIS = "default_presence_detector_hysteresis"
 
-CONFIG_SCHEMA = cv.ENTITY_BASE_SCHEMA.extend(
+CONFIG_SCHEMA = camera.CAMERA_SCHEMA.extend(
     {
         cv.GenerateID(): cv.declare_id(MLX90640Component),
         cv.Optional(CONF_DEFAULT_RESOLUTION, default="RESOLUTION_16_BIT"): cv.enum(
@@ -113,13 +113,10 @@ CONFIG_SCHEMA = cv.ENTITY_BASE_SCHEMA.extend(
             unit_of_measurement=UNIT_CELSIUS,
         ),
     }
-).extend(cv.COMPONENT_SCHEMA).extend(i2c.i2c_device_schema(0x33))
-
+).extend(i2c.i2c_device_schema(0x33))
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_ID])
-    await setup_entity(var, config)
-    await cg.register_component(var, config)
+    var = await camera.new_camera(config)
     await i2c.register_i2c_device(var, config)
 
     cg.add(var.set_default_resolution(config[CONF_DEFAULT_RESOLUTION]))

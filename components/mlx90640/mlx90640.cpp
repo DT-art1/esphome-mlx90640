@@ -27,61 +27,6 @@ namespace esphome {
 namespace mlx90640 {
 
 static const char *const TAG = "mlx90640";
-/* ---------------- CameraImage class ---------------- */
-MLX90640CameraImage::MLX90640CameraImage(uint8_t *data, size_t length, uint8_t requesters) : data_(data), length_(length), requesters_(requesters) {}
-
-uint8_t *MLX90640CameraImage::get_data_buffer() {
-  return data_;
-}
-
-size_t MLX90640CameraImage::get_data_length() {
-  return length_;
-}
-
-bool MLX90640CameraImage::was_requested_by(camera::CameraRequester requester) const {
-  return (this->requesters_ & (1 << requester)) != 0;
-}
-
-MLX90640CameraImage::~MLX90640CameraImage() {
-  free(data_);
-}
-
-/* ---------------- CameraImageReader class ---------------- */
-void MLX90640CameraImageReader::set_image(std::shared_ptr<camera::CameraImage> image) {
-//  ESP_LOGD(TAG,"MLX90640CameraImageReader::set_image()");
-  this->image_ = std::static_pointer_cast<MLX90640CameraImage>(image);
-  //this->image_ = std::move(image);
-  this->offset_ = 0;
-}
-
-size_t MLX90640CameraImageReader::available() const {
-  if (!this->image_)
-    return 0;
-
-  return this->image_->get_data_length() - this->offset_;
-}
-
-void MLX90640CameraImageReader::return_image() {
-//  ESP_LOGD(TAG,"MLX90640CameraImageReader::return_image()");
-  this->image_.reset();
-}
-
-void MLX90640CameraImageReader::consume_data(size_t consumed) { this->offset_ += consumed; }
-
-uint8_t *MLX90640CameraImageReader::peek_data_buffer() { return this->image_->get_data_buffer() + this->offset_; }
-
-void MLX90640::request_image(camera::CameraRequester requester) {
-  single_requesters_ |= (1U << requester);
-}
-
-void MLX90640::add_image_callback(std::function<void(std::shared_ptr<camera::CameraImage>)> &&callback) {
-    ESP_LOGD(TAG,"MLX90640CameraImageReader::add_image_callback()");
-    this->new_image_callback_.add(std::move(callback));
-}
-
-camera::CameraImageReader* MLX90640::create_image_reader() {
-  return new MLX90640CameraImageReader;
-}
 
 void MLX90640::print_memory_8_bytes(uint8_t* address) {
   ESP_LOGD(TAG, "%p: %02X%02X %02X%02X %02X%02X %02X%02X", address,
@@ -115,6 +60,7 @@ void MLX90640::print_device_id() {
 }
 
 void MLX90640::setup() {
+  CameraImpl::setup();
   state = STATE_CLEAR_NEW_DATA_READY_BIT;
   ::mlx_device = this;
 
@@ -140,6 +86,42 @@ void MLX90640::setup() {
   }
 
   ESP_LOGCONFIG(TAG, "Extracted Parameters from EE.");
+
+  this->add_capture_callback([this](const std::shared_ptr<camera::CameraImage> &image, camera::CameraImageSpec spec) {
+    const int width = 32;
+    const int height = 24;
+
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        int src_idx = y * width + x;
+
+        // left rotate
+        // int new_x = y;
+        // int new_y = width - 1 - x;
+        // int dst_idx = new_y * height + new_x;
+
+        // right rotate
+        int new_x = height - 1 - y;
+        int new_y = x;
+        int dst_idx = new_y * height + new_x;
+
+        // no rotation
+        // int dst_idx = src_idx;
+
+        float t = framebuf[src_idx];
+        float rangeT = maximum_temperature_ - minimum_temperature_;
+        if (rangeT > 0.1f) {
+          t = (t - minimum_temperature_) / rangeT;
+          if (t < 0)
+            t = 0.0f;
+          if (t > 1.0f)
+            t = 1.0f;
+        }
+        uint8_t color = (t * 255.0f);
+        image->get_data_buffer()[dst_idx] = color;
+      }
+    }
+  });
 
   set_configuration();
 }
@@ -299,16 +281,11 @@ void MLX90640::loop() {
         return;
       }
 
-      // uint16_t statusRegister = getStatusRegister();
-      // if (MLX90640_GET_FRAME(statusRegister) == 0) {
-        int status = MLX90640_GetFrameData(0x33, frame);
-        if (status < 0) 
-          ESP_LOGD(TAG,"STATE_WAIT_FOR_SUB_PAGE_0 failed. Status: %i. Error: %s", status, api_to_string(status));
+      int status = MLX90640_GetFrameData(0x33, frame);
+      if (status < 0)
+        ESP_LOGD(TAG,"STATE_WAIT_FOR_SUB_PAGE_0 failed. Status: %i. Error: %s", status, api_to_string(status));
 
-        state = STATE_CALCULATE_SUB_PAGE_0;
-//        state = STATE_PUBLISH_IMAGE;
-//state = STATE_EXTRACT_TEMPERATURE;
-      // }
+      state = STATE_CALCULATE_SUB_PAGE_0;
     }
     break;
     case STATE_CALCULATE_SUB_PAGE_0: {
@@ -341,50 +318,7 @@ void MLX90640::loop() {
     }
     break;
     case STATE_PUBLISH_IMAGE: {
-        state = STATE_PUBLISH_SENSORS;
-        // request idle image every idle_update_interval
-        const uint32_t now = millis();
-        // if (this->idle_update_interval_ != 0 && (now - this->last_idle_request_) > this->idle_update_interval_) {
-        //   this->last_idle_request_ = now;
-        //   this->request_image(camera::IDLE);
-        //   ESP_LOGD(TAG,"MLX90640::loop() request_image.");
-        // } else {
-        //   return;
-        // }
-
-        // // Check if we should fetch a new image
-        // if (!this->has_requested_image_())
-        //   return;
-        this->request_image(camera::IDLE);
-
-        if (this->current_image_.use_count() > 1) {
-          ESP_LOGD(TAG,"MLX90640::loop() image is still in use.");
-          return;
-        }
-        // if (now - this->last_update_ <= this->max_update_interval_)
-        //   return;
-        JPEGENCODE jpe;
-        JPEGENC jpg;
-        uint8_t ucMCU[64]; // fake image data 8x8
-
-        int width = 32 * 8;// 32 * 8 -> 256;
-        int height = 24 * 8;// 24 * 8 -> 196;
-
-        int size = 8192; // test with an output buffer
-        uint8_t* buffer = (uint8_t *)malloc(size);
-        int rc = jpg.open(buffer, size);
-        if (rc != JPEGE_SUCCESS) {
-          ESP_LOGD(TAG,"MLX90640::loop() jpeg open failed. Error: %i", rc);
-          free(buffer);
-          return;
-        }
-        rc = jpg.encodeBegin(&jpe, width, height, JPEGE_PIXEL_GRAYSCALE, JPEGE_SUBSAMPLE_444, JPEGE_Q_BEST);
-        if (rc != JPEGE_SUCCESS) {
-          ESP_LOGD(TAG,"MLX90640::loop() jpeg encode failed. Error: %i", rc);
-          free(buffer);
-          return;
-        }
-        memset(ucMCU, 0, sizeof(ucMCU));
+      state = STATE_PUBLISH_SENSORS;
 
       float minT = 1000.0f;
       float maxT = -1000.0f;
@@ -400,34 +334,7 @@ void MLX90640::loop() {
       minimum_temperature_ = minT;
       maximum_temperature_ = maxT;
 
-      //ESP_LOGD(TAG, "Temperature Range %.2f - %.2f C", minT, maxT);
-
-        int iMCUCount = ((width + jpe.cx-1)/ jpe.cx) * ((height + jpe.cy-1) / jpe.cy);
-        for (uint16_t i=0; i<iMCUCount && rc == JPEGE_SUCCESS; i++) {
-          float t = framebuf[i];
-          float rangeT = maxT - minT;
-          if (rangeT > 0.1f) {
-            t = (t - minT) / rangeT;
-            if (t < 0)
-              t = 0.0f;
-            if (t > 1.0f)
-              t = 1.0f;
-          }
-          uint8_t color = (t * 255.0f);
-      for (int i=0; i<64; i++)
-        ucMCU[i] = color;
-
-//          ESP_LOGD(TAG,"MLX90640::loop() add MCU(%i) at position y(%i) x(%i) cy(%i) cx(%i)",i, jpe.y, jpe.x, jpe.cy, jpe.cx);
-
-        rc = jpg.addMCU(&jpe, ucMCU, 8);
-      }
-      int datasize = jpg.close();
-
-      //ESP_LOGD(TAG,"MLX90640::loop() jpeg encoded. Size: %i", datasize);
-      current_image_ = std::make_shared<MLX90640CameraImage>(buffer, datasize, this->single_requesters_ | this->stream_requesters_);
-      new_image_callback_.call(this->current_image_);
-      last_image_update_ = now;
-      single_requesters_ = 0;
+      CameraImpl::loop();
     }
     break;
     case STATE_PUBLISH_SENSORS: {

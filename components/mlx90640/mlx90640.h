@@ -14,33 +14,6 @@
 namespace esphome {
 namespace mlx90640 {
 
-class MLX90640CameraImage : public camera::CameraImage {
- public:
-  MLX90640CameraImage(uint8_t *data, size_t length, uint8_t requester);
-  uint8_t *get_data_buffer() override;
-  size_t get_data_length() override;
-  bool was_requested_by(camera::CameraRequester requester) const override;
-  virtual ~MLX90640CameraImage();
- protected:
-  uint8_t *data_;
-  size_t length_;
-  uint8_t requesters_;
-};
-
-/* ---------------- CameraImageReader class ---------------- */
-class MLX90640CameraImageReader : public camera::CameraImageReader {
- public:
-  void set_image(std::shared_ptr<camera::CameraImage> image) override;
-  size_t available() const override;
-  uint8_t *peek_data_buffer() override;
-  void consume_data(size_t consumed) override;
-  void return_image() override;
-
- protected:
-  std::shared_ptr<MLX90640CameraImage> image_;
-  size_t offset_{0};
-};
-
 enum RefreshRate {
   IR_REFRESH_RATE_0_DOT_5_HZ = 0,
   IR_REFRESH_RATE_1_HZ = 1,
@@ -94,9 +67,8 @@ static const std::map<uint8_t, std::string> Resolution_mappings_to_string {
   {RESOLUTION_19_BIT, "RESOLUTION_19_BIT"},
 };
 
-class MLX90640 : public camera::Camera, public i2c::I2CDevice {
+class MLX90640 : public camera::CameraImpl, public i2c::I2CDevice {
   public:
-
     enum Mode {
       INTERLEAVED = 0,
       CHESS_PATTERN = 1,
@@ -111,13 +83,6 @@ class MLX90640 : public camera::Camera, public i2c::I2CDevice {
       STATE_PUBLISH_IMAGE,
       STATE_PUBLISH_SENSORS,
     };
-
-/* ---------------- Camera implementation class ---------------- */
-    void request_image(camera::CameraRequester requester) override;
-    void start_stream(camera::CameraRequester requester) override {}
-    void stop_stream(camera::CameraRequester requester) override {}
-    void add_image_callback(std::function<void(std::shared_ptr<camera::CameraImage>)> &&callback) override;
-    camera::CameraImageReader* create_image_reader() override;
 
     void print_memory_8_bytes(uint8_t* address);
     void print_memory_16_bytes(uint8_t* address);
@@ -152,19 +117,9 @@ class MLX90640 : public camera::Camera, public i2c::I2CDevice {
 //    uint16_t i2c_max_message_size {256};
     uint16_t i2c_max_message_size {16};
     int message = 0;
-    std::shared_ptr<MLX90640CameraImage> current_image_;
-    CallbackManager<void(std::shared_ptr<camera::CameraImage>)> new_image_callback_{};
-    uint32_t max_update_interval_{1000};
-    uint32_t idle_update_interval_{5000};
-    uint32_t last_idle_request_{0};
-    uint32_t last_image_update_{0};
 
     uint32_t publish_sensors_timeout_{10000};
     uint32_t last_sensors_update_{0};
-
-    uint8_t single_requesters_{0};
-    uint8_t stream_requesters_{0};
-    bool has_requested_image_() const { return this->single_requesters_ || this->stream_requesters_; }
 
     void set_default_resolution(Resolution resolution) { resolution_ = resolution; }
     void set_default_refresh_rate(RefreshRate refresh_rate) { refresh_rate_ = refresh_rate; }

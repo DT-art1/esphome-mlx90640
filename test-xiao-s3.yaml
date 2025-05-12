@@ -49,10 +49,12 @@ mlx90640:
         name: Presence Threshold
     presence_detector_hysteresis:
         name: Presence Hysteresis
-#  on_image:
-#    then:
-#    - lambda: |-
-#        ESP_LOGD("main", "AUTOMATION: on_image len=%d, data=%c", image.length, image.data[0]);
+    # width: 32
+    # height: 24
+    width: 24
+    height: 32
+    image_format: GRAYSCALE
+    encoder_quality: BEST
 
 
 #esp32_camera_web_server:
