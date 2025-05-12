@@ -1,6 +1,7 @@
 # MLX90640 for ESPHome
 
 Custom ESPHome component for the MLX90640 thermal camera.
+This implementation depends on https://github.com/esphome/esphome/pull/7639
 
 ## Installation
 
