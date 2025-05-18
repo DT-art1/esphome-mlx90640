@@ -87,7 +87,7 @@ void MLX90640::setup() {
 
   ESP_LOGCONFIG(TAG, "Extracted Parameters from EE.");
 
-  this->add_capture_callback([this](const std::shared_ptr<camera::CameraImage> &image, camera::CameraImageSpec spec) {
+  this->add_capture_callback([this](const std::shared_ptr<camera::CameraImage> &image, camera::CameraImageSpec spec, camera::CameraCaptureContext &context) {
     const int width = 32;
     const int height = 24;
 
